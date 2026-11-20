@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Happy Birthday 💖</title>
+<style>
+  :root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  @media (orientation: portrait) {
+    body { position: absolute; top: 0; left: 100%; width: 100vh; height: 100vw; transform: rotate(90deg); transform-origin: top left; }
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #msg { position: fixed; left: 6%; top: calc(env(safe-area-inset-top, 0px) + 8%); color: #fff;
+         font: 600 clamp(10px, 1.6vw, 15px)/1.6 "Segoe UI", system-ui, sans-serif; max-width: 42%; z-index: 2; white-space: pre-line; }
+  @media (max-width: 700px) { #msg { max-width: 60%; font-size: 11px; } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="msg"></div>
+<script>
+// ====== EDIT ME ======
+const NAME = "";  // e.g. "Anna" — leave empty to skip
+const LINES = [
+  "Happy 18th Birthday 🎉",
+  "Today is a big milestone 🌟",
+  "I hope your day is full of laughter ✨",
+  "and all the things that make you smile 😊",
+  "18 is a big step, so enjoy every moment 🎈",
+  "May this new chapter bring you",
+  "new adventures, good people, and big wins 💪",
+  "I hope you chase every dream you have 🚀",
+  "and never stop believing in yourself 💛",
+  "Wishing you happiness, success and peace 🌼",
+  "in everything you do 🤍",
+  "Take care, and have a wonderful day 🎂"
+];
+// =====================
+
+const cv = document.getElementById("c"), ctx = cv.getContext("2d"), msg = document.getElementById("msg");
+let W, H, dpr, cx, baseY, S;
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  const portrait = innerHeight > innerWidth;   // page is always shown landscape
+  W = portrait ? innerHeight : innerWidth; H = portrait ? innerWidth : innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cx = W > H ? W * 0.68 : W * 0.5;
+  baseY = H * 0.9;
+  S = Math.min(W * (W > H ? 0.4 : 0.9), H * 0.55) / 34;
+}
+addEventListener("resize", resize); resize();
+
+const COLORS = ["#ff4d8d", "#ff7ab0", "#ffb3c7", "#ff8a3d", "#ffc23d", "#ff3b6b", "#ffd86b", "#f06292"];
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+function heart(x, y, s, color, a = 1, rot = 0) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s);
+  ctx.globalAlpha = a; ctx.fillStyle = color; ctx.beginPath();
+  ctx.moveTo(0, 0.35);
+  ctx.bezierCurveTo(-1, -0.4, -0.6, -1, 0, -0.5);
+  ctx.bezierCurveTo(0.6, -1, 1, -0.4, 0, 0.35);
+  ctx.fill(); ctx.restore();
+}
+
+// Trunk: a curve that grows upward
+const TRUNK_H = () => H * 0.38;
+function trunkPoint(t) {               // t: 0..1 from the ground up
+  const h = TRUNK_H();
+  return { x: cx + Math.sin(t * 2.2) * S * 1.2 * t, y: baseY - h * t };
+}
+function drawTrunk(p) {
+  const n = 60;
+  for (let i = 0; i < n * p; i++) {
+    const t = i / n, a = trunkPoint(t), b = trunkPoint((i + 1) / n);
+    ctx.strokeStyle = "#f4a9c0";
+    ctx.lineWidth = S * (1.6 - t * 1.1);
+    ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  }
+}
+
+// Canopy: hearts scattered inside a heart shape
+const crown = () => trunkPoint(1);
+const petals = [];
+for (let i = 0; i < 950; i++) {
+  const t = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random());
+  const hx = 16 * Math.pow(Math.sin(t), 3) * r;
+  const hy = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) * r;
+  petals.push({ hx, hy, size: rnd(0.7, 1.5), color: COLORS[(Math.random() * COLORS.length) | 0],
+                rot: rnd(-0.6, 0.6), born: rnd(0, 1) });
+}
+petals.sort((a, b) => b.hy - a.hy);        // bloom from the bottom of the heart upward
+petals.forEach((p, i) => p.born = i / petals.length);
+
+const falling = [];
+function spawnFall() {
+  const p = petals[(Math.random() * petals.length) | 0], tp = crown();
+  falling.push({ x: tp.x + p.hx * S * 0.95, y: tp.y - S * 14 + p.hy * S * 0.95, vy: rnd(0.4, 1.1),
+                 vx: rnd(-0.3, 0.3), s: S * rnd(0.6, 1), c: p.color, r: rnd(0, 6), vr: rnd(-0.03, 0.03) });
+}
+
+// Timeline (seconds)
+const T_SEED = 1.8, T_GROW = 3.5, T_BLOOM = 6, T_TEXT = T_SEED + T_GROW * 0.7 + T_BLOOM + 0.8;
+const t0 = performance.now();
+let typed = false;
+
+function typeLines() {
+  if (typed) return; typed = true;
+  const all = (NAME ? ["Dear " + NAME + " 💖"] : []).concat(LINES);
+  let li = 0, ci = 0, out = "";
+  (function step() {
+    if (li >= all.length) return;
+    const chars = Array.from(all[li]);
+    out += chars[ci++];
+    msg.textContent = out;
+    if (ci >= chars.length) { li++; ci = 0; out += "\n"; setTimeout(step, 650); }
+    else setTimeout(step, 60);
+  })();
+}
+
+function frame(now) {
+  const t = (now - t0) / 1000;
+  ctx.clearRect(0, 0, W, H);
+
+  // ground line
+  const gp = Math.min(1, Math.max(0, (t - T_SEED) / 1));
+  if (gp > 0) {
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath();
+    ctx.moveTo(cx - W * 0.4 * gp, baseY); ctx.lineTo(cx + W * 0.4 * gp, baseY); ctx.stroke();
+  }
+
+  if (t < T_SEED) {                                   // seed heart floats down
+    const p = t / T_SEED;
+    heart(cx, H * 0.3 + (baseY - H * 0.3) * p * p, S * 1.6, "#ff7ab0", 1, Math.sin(t * 5) * 0.2);
+  } else {
+    const gp2 = Math.min(1, (t - T_SEED) / T_GROW);
+    drawTrunk(1 - Math.pow(1 - gp2, 3));
+
+    const bp = Math.min(1, Math.max(0, (t - T_SEED - T_GROW * 0.7) / T_BLOOM));
+    const tp = crown();
+    for (const p of petals) {
+      const k = (bp - p.born * 0.85) / 0.15;
+      if (k <= 0) continue;
+      const sc = Math.min(1, k);
+      heart(tp.x + p.hx * S * 0.95, tp.y - S * 14 + p.hy * S * 0.95, S * 1.1 * p.size * sc, p.color, 1, p.rot);
+    }
+    if (bp > 0.95 && Math.random() < 0.35) spawnFall();
+  }
+
+  for (let i = falling.length - 1; i >= 0; i--) {
+    const f = falling[i];
+    f.y += f.vy; f.x += f.vx + Math.sin(f.y * 0.03) * 0.3; f.r += f.vr;
+    heart(f.x, f.y, f.s, f.c, 0.9, f.r);
+    if (f.y > baseY) falling.splice(i, 1);
+  }
+
+  if (t > T_TEXT) typeLines();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
